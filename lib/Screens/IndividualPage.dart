@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:realtime_client/realtime_client.dart'; // necessário para PostgresChangeFilter
 import 'package:talk_messenger/Model/ChatModel.dart';
 import 'package:talk_messenger/Model/MessageModel.dart';
 
@@ -52,8 +53,8 @@ class _IndividualPageState extends State<IndividualPage> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          // ✅ CORREÇÃO: usar string no formato "coluna=operador.valor"
-          filter: 'conversation_id=eq.${widget.chatModel.id}',
+          // ✅ CORREÇÃO: usar PostgresChangeFilter.eq
+          filter: PostgresChangeFilter.eq('conversation_id', widget.chatModel.id),
           callback: (payload) {
             final msg = MessageModel.fromMap(payload.newRecord);
             setState(() => _messages.add(msg));
