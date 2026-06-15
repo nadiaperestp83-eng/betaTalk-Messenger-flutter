@@ -40,11 +40,10 @@ jobs:
 
       - name: Build APK
         env:
-          FLUTTER_BUILD_DISABLE_GRADLE_UPDATE: "true"
+          # Estas variáveis forçam o Gradle a usar as versões que você definiu nos arquivos
+          ORG_GRADLE_PROJECT_androidGradlePluginVersion: "8.6.0"
         run: |
-          # Bloqueia a escrita no arquivo para impedir o "Upgrading" automático do Flutter
-          chmod -w android/build.gradle
-          flutter build apk --release --no-tree-shake-icons
+          flutter build apk --release --no-tree-shake-icons --verbose
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
