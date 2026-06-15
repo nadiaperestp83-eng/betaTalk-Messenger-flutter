@@ -39,13 +39,15 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: |
-          cd android
-          ./gradlew clean
-          cd ..
-          flutter build apk --release --no-tree-shake-icons
         env:
           FLUTTER_BUILD_DISABLE_GRADLE_UPDATE: "true"
+        run: |
+          # Garante permissão de execução para o gradlew
+          chmod +x android/gradlew
+          # Limpa o projeto para evitar conflitos de cache
+          ./android/gradlew clean -p android
+          # Executa o build
+          flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
