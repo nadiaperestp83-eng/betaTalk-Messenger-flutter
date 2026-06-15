@@ -1,112 +1,248 @@
-import 'package:chatapp/CustomUI/ButtonCard.dart';
-import 'package:chatapp/CustomUI/ContactCard.dart';
-import 'package:chatapp/Model/ChatModel.dart';
-import 'package:chatapp/Screens/CreateGroup.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:talk_messenger/Model/ChatModel.dart';
+import 'package:talk_messenger/Model/UserModel.dart';
+import 'package:talk_messenger/Screens/IndividualPage.dart';
 
 class SelectContact extends StatefulWidget {
-  SelectContact({Key key}) : super(key: key);
+  const SelectContact({Key? key}) : super(key: key);
 
   @override
-  _SelectContactState createState() => _SelectContactState();
+  State<SelectContact> createState() => _SelectContactState();
 }
 
 class _SelectContactState extends State<SelectContact> {
-  @override
-  Widget build(BuildContext context) {
-    List<ChatModel> contacts = [
-      ChatModel(name: "Dev Stack", status: "A full stack developer"),
-      ChatModel(name: "Balram", status: "Flutter Developer..........."),
-      ChatModel(name: "Saket", status: "Web developer..."),
-      ChatModel(name: "Bhanu Dev", status: "App developer...."),
-      ChatModel(name: "Collins", status: "Raect developer.."),
-      ChatModel(name: "Kishor", status: "Full Stack Web"),
-      ChatModel(name: "Testing1", status: "Example work"),
-      ChatModel(name: "Testing2", status: "Sharing is caring"),
-      ChatModel(name: "Divyanshu", status: "....."),
-      ChatModel(name: "Helper", status: "Love you Mom Dad"),
-      ChatModel(name: "Tester", status: "I find the bugs"),
-    ];
+  final _searchController = TextEditingController();
+  List<UserModel> _users = [];
+  List<UserModel> _filtered = [];
+  bool _loading = false;
 
-    return Scaffold(
-        appBar: AppBar(
-          title: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Select Contact",
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_filter);
+  }
+
+  Future<void> _search(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _users = _filtered = []);
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final data = await Supabase.instance.client
+          .from('users')
+          .select()
+          .neq('id', userId ?? '')
+          .or('name.ilike.%$query%,phone.ilike.%$query%')
+          .limit(20);
+
+      setState(() {
+        _users = (data as List).map((u) => UserModel.fromMap(u)).toList();
+        _filtered = _users;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _filter() {
+    final q = _searchController.text.trim();
+    if (q.isEmpty) {
+      setState(() => _filtered = _users);
+      return;
+    }
+    _search(q);
+  }
+
+  Future<void> _startConversation(UserModel user) async {
+    final supabase = Supabase.instance.client;
+    final myId = supabase.auth.currentUser?.id;
+    if (myId == null) return;
+
+    try {
+      // Verifica se já existe conversa entre os dois
+      final existing = await supabase
+          .from('conversation_members')
+          .select('conversation_id')
+          .eq('user_id', myId);
+
+      final myConvIds = (existing as List)
+          .map((e) => e['conversation_id'] as String)
+          .toList();
+
+      if (myConvIds.isNotEmpty) {
+        final shared = await supabase
+            .from('conversation_members')
+            .select('conversation_id')
+            .eq('user_id', user.id)
+            .inFilter('conversation_id', myConvIds);
+
+        if ((shared as List).isNotEmpty) {
+          final convId = shared.first['conversation_id'];
+          final conv = await supabase
+              .from('conversations')
+              .select()
+              .eq('id', convId)
+              .single();
+
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => IndividualPage(
+                chatModel: ChatModel(
+                  id: conv['id'],
+                  name: user.name,
+                  avatar: user.avatar,
+                  isOnline: user.isOnline,
                 ),
               ),
-              Text(
-                "256 contacts",
-                style: TextStyle(
-                  fontSize: 13,
-                ),
-              )
-            ],
-          ),
-          actions: [
-            IconButton(
-                icon: Icon(
-                  Icons.search,
-                  size: 26,
-                ),
-                onPressed: () {}),
-            PopupMenuButton<String>(
-              padding: EdgeInsets.all(0),
-              onSelected: (value) {
-                print(value);
-              },
-              itemBuilder: (BuildContext contesxt) {
-                return [
-                  PopupMenuItem(
-                    child: Text("Invite a friend"),
-                    value: "Invite a friend",
-                  ),
-                  PopupMenuItem(
-                    child: Text("Contacts"),
-                    value: "Contacts",
-                  ),
-                  PopupMenuItem(
-                    child: Text("Refresh"),
-                    value: "Refresh",
-                  ),
-                  PopupMenuItem(
-                    child: Text("Help"),
-                    value: "Help",
-                  ),
-                ];
-              },
             ),
-          ],
+          );
+          return;
+        }
+      }
+
+      // Cria nova conversa
+      final conv = await supabase.from('conversations').insert({
+        'is_group': false,
+        'name': user.name,
+        'last_message': '',
+        'last_message_time': DateTime.now().toIso8601String(),
+      }).select().single();
+
+      await supabase.from('conversation_members').insert([
+        {'conversation_id': conv['id'], 'user_id': myId},
+        {'conversation_id': conv['id'], 'user_id': user.id},
+      ]);
+
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => IndividualPage(
+            chatModel: ChatModel(
+              id: conv['id'],
+              name: user.name,
+              avatar: user.avatar,
+              isOnline: user.isOnline,
+            ),
+          ),
         ),
-        body: ListView.builder(
-            itemCount: contacts.length + 2,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return InkWell(
-                  onTap: () {
-                    Navigator.push(context,
-                        MaterialPageRoute(builder: (builder) => CreateGroup()));
-                  },
-                  child: ButtonCard(
-                    icon: Icons.group,
-                    name: "New group",
-                  ),
-                );
-              } else if (index == 1) {
-                return ButtonCard(
-                  icon: Icons.person_add,
-                  name: "New contact",
-                );
-              }
-              return ContactCard(
-                contact: contacts[index - 2],
-              );
-            }));
+      );
+    } catch (e) {
+      debugPrint('Erro ao iniciar conversa: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF0A84FF)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Nova conversa',
+          style: TextStyle(
+            color: Color(0xFF111111),
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Buscar por nome ou telefone...',
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF0A84FF)),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: _search,
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                        color: Color(0xFF0A84FF)))
+                : _filtered.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchController.text.isEmpty
+                              ? 'Digite um nome ou telefone'
+                              : 'Nenhum usuário encontrado',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _filtered.length,
+                        itemBuilder: (context, index) {
+                          final user = _filtered[index];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: const Color(0xFFB0BEC5),
+                              backgroundImage: user.avatar != null
+                                  ? NetworkImage(user.avatar!)
+                                  : null,
+                              child: user.avatar == null
+                                  ? Text(
+                                      user.name[0].toUpperCase(),
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    )
+                                  : null,
+                            ),
+                            title: Text(
+                              user.name,
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF111111)),
+                            ),
+                            subtitle: Text(
+                              user.status ?? user.phone ?? '',
+                              style: const TextStyle(
+                                  fontSize: 13, color: Color(0xFF8E8E93)),
+                            ),
+                            trailing: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: user.isOnline
+                                    ? const Color(0xFF34C759)
+                                    : Colors.grey,
+                              ),
+                            ),
+                            onTap: () => _startConversation(user),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
   }
 }
