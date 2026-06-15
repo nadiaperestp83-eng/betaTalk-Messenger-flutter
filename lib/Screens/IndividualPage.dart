@@ -52,12 +52,8 @@ class _IndividualPageState extends State<IndividualPage> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          // CORREÇÃO: Utilizando o objeto PostgresChangeFilter com parâmetros explícitos
-          filter: PostgresChangeFilter(
-            column: 'conversation_id',
-            operator: 'eq',
-            value: widget.chatModel.id.toString(),
-          ),
+          // ✅ CORREÇÃO: usar string no formato "coluna=operador.valor"
+          filter: 'conversation_id=eq.${widget.chatModel.id}',
           callback: (payload) {
             final msg = MessageModel.fromMap(payload.newRecord);
             setState(() => _messages.add(msg));
