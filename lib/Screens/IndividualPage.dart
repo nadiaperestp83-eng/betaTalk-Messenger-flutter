@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// REMOVA O IMPORT DO REALTIME_CLIENT. Ele é a causa raiz do erro de sintaxe.
 import 'package:talk_messenger/Model/ChatModel.dart';
 import 'package:talk_messenger/Model/MessageModel.dart';
 
@@ -47,17 +46,19 @@ class _IndividualPageState extends State<IndividualPage> {
   }
 
   void _subscribeMessages() {
-    // CORREÇÃO DEFINITIVA: Passando a string de filtro diretamente.
-    // Isso ignora os construtores da classe que estão dando erro.
+    // CORREÇÃO: removido o parâmetro filter (String não é aceita nesta versão do SDK).
+    // Filtramos manualmente no callback pelo conversation_id.
     Supabase.instance.client
         .channel('messages:${widget.chatModel.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          filter: 'conversation_id=eq.${widget.chatModel.id}',
           callback: (payload) {
-            final msg = MessageModel.fromMap(payload.newRecord);
+            final record = payload.newRecord;
+            // Garante que só processa mensagens desta conversa
+            if (record['conversation_id'] != widget.chatModel.id) return;
+            final msg = MessageModel.fromMap(record);
             setState(() => _messages.add(msg));
             _scrollToBottom();
           },
