@@ -52,11 +52,8 @@ class _IndividualPageState extends State<IndividualPage> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          filter: PostgresChangeFilter(
-            type: FilterType.eq,
-            column: 'conversation_id',
-            value: widget.chatModel.id,
-          ),
+          // CORREÇÃO: O filtro agora é uma string, não um objeto FilterType
+          filter: 'conversation_id=eq.${widget.chatModel.id}',
           callback: (payload) {
             final msg = MessageModel.fromMap(payload.newRecord);
             setState(() => _messages.add(msg));
